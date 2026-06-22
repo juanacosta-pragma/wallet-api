@@ -1,24 +1,19 @@
 package co.com.bancolombia.model.wallet;
 import co.com.bancolombia.model.pocket.Pocket;
-import lombok.Builder;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
 @Getter
 @Setter
+@With
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder(toBuilder = true)
 public class Wallet {
     private String id;
     private String userId;
-    private BigDecimal totalBalance;
     @Builder.Default
-    private List<Pocket> pockets = new ArrayList<>();
+    private List<Pocket> pocketes = new ArrayList<>();
 }

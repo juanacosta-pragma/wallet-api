@@ -1,60 +1,47 @@
 package co.com.bancolombia.api;
 
-import org.assertj.core.api.Assertions;
+import co.com.bancolombia.api.handler.PocketHandler;
+import co.com.bancolombia.api.handler.TransactionHandler;
+import co.com.bancolombia.api.handler.WalletHandler;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webflux.test.autoconfigure.WebFluxTest;
-import org.springframework.http.MediaType;
-import org.springframework.test.context.ContextConfiguration;
-import org.springframework.test.web.reactive.server.WebTestClient;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.web.reactive.function.server.RouterFunction;
+import org.springframework.web.reactive.function.server.ServerResponse;
 
-@ContextConfiguration(classes = {RouterRest.class, Handler.class})
-@WebFluxTest
+import static org.assertj.core.api.Assertions.assertThat;
+
+@ExtendWith(MockitoExtension.class)
 class RouterRestTest {
 
-    @Autowired
-    private WebTestClient webTestClient;
+    @Mock
+    private WalletHandler walletHandler;
+
+    @Mock
+    private PocketHandler pocketHandler;
+
+    @Mock
+    private TransactionHandler transactionHandler;
+
+    private final RouterRest router = new RouterRest();
 
     @Test
-    void testListenGETUseCase() {
-        webTestClient.get()
-                .uri("/api/usecase/path")
-                .accept(MediaType.APPLICATION_JSON)
-                .exchange()
-                .expectStatus().isOk()
-                .expectBody(String.class)
-                .value(userResponse -> {
-                            Assertions.assertThat(userResponse).isEmpty();
-                        }
-                );
+    void routerWalletFunction_isNotNull() {
+        RouterFunction<ServerResponse> rf = router.routerWalletFunction(walletHandler);
+        assertThat(rf).isNotNull();
     }
 
     @Test
-    void testListenGETOtherUseCase() {
-        webTestClient.get()
-                .uri("/api/otherusercase/path")
-                .accept(MediaType.APPLICATION_JSON)
-                .exchange()
-                .expectStatus().isOk()
-                .expectBody(String.class)
-                .value(userResponse -> {
-                            Assertions.assertThat(userResponse).isEmpty();
-                        }
-                );
+    void routerPocketFunction_isNotNull() {
+        RouterFunction<ServerResponse> rf = router.routerPocketFunction(pocketHandler);
+        assertThat(rf).isNotNull();
     }
 
     @Test
-    void testListenPOSTUseCase() {
-        webTestClient.post()
-                .uri("/api/usecase/otherpath")
-                .accept(MediaType.APPLICATION_JSON)
-                .bodyValue("")
-                .exchange()
-                .expectStatus().isOk()
-                .expectBody(String.class)
-                .value(userResponse -> {
-                            Assertions.assertThat(userResponse).isEmpty();
-                        }
-                );
+    void routerTransactionFunction_isNotNull() {
+        RouterFunction<ServerResponse> rf = router.routerTransactionFunction(transactionHandler);
+        assertThat(rf).isNotNull();
     }
 }
+

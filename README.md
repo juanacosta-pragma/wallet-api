@@ -36,6 +36,14 @@ Los driven adapter representan implementaciones externas a nuestro sistema, como
 soap, bases de datos, lectura de archivos planos, y en concreto cualquier origen y fuente de datos con la que debamos
 interactuar.
 
+Actualmente hay dos adapters de persistencia paralelos:
+
+| Adapter | Tecnología | Estado |
+|---|---|---|
+| `mongo-repository` | Spring Data MongoDB Reactive | Fuente de la verdad (siempre activo) |
+
+> El segundo adapter ilustra el patrón **dual-write** con un `CompositewalletRepository`. Es un ejercicio educativo: en producción real se prefieren patrones como Outbox o CDC.
+
 ### Entry Points
 
 Los entry points representan los puntos de entrada de la aplicación o el inicio de los flujos de negocio.
@@ -45,3 +53,79 @@ Los entry points representan los puntos de entrada de la aplicación o el inicio
 Este módulo es el más externo de la arquitectura, es el encargado de ensamblar los distintos módulos, resolver las dependencias y crear los beans de los casos de use (UseCases) de forma automática, inyectando en éstos instancias concretas de las dependencias declaradas. Además inicia la aplicación (es el único módulo del proyecto donde encontraremos la función “public static void main(String[] args)”.
 
 **Los beans de los casos de uso se disponibilizan automaticamente gracias a un '@ComponentScan' ubicado en esta capa.**
+
+
+## Deployment
+
+Esta aplicacion esta Construida con el fin de ser desplegada en un contenedor Docker, para esto se ha incluido un Dockerfile con la configuración necesaria para construir la imagen y ejecutar la aplicación dentro del contenedor.
+
+Se debe seguir los siguientes pasos para construir la imagen y ejecutar el contenedor:
+1. Construir la imagen de Docker:
+   ```bash
+   podman build -t wallet-pragma-api -f deployment/Dockerfile .
+   ```
+2. Ejecutar el AWS CLI:
+   ```bash
+   aws ecr get-login-password --region us-east-1 | podman login --username AWS --password-stdin 437952802980.dkr.ecr.us-east-1.amazonaws.com
+   ```
+3. Aprovisionar la infraestructura con terraform en /deployment/terraform:
+   ```bash
+   terraform init
+   terraform apply -auto-approve
+   ```
+4. Etiquetar la imagen para ECR:
+   ```bash
+   podman tag wallet-pragma-api:latest 437952802980.dkr.ecr.us-east-1.amazonaws.com/wallet-pragma-api:latest
+   ```
+5. Subir la imagen a ECR:
+   ```bash
+   podman push 437952802980.dkr.ecr.us-east-1.amazonaws.com/wallet-pragma-api:latest
+   ```
+6. Ejecutar el contenedor:
+   ```bash
+   podman run -d -p 8080:8080 --name wallet-pragma-api 437952802980.dkr.ecr.us-east-1.amazonaws.com/wallet-pragma-api:latest
+   ```
+   
+
+## Infraestructura
+La infraestructura de esta aplicación se ha aprovisionado utilizando **Terraform** (módulos en `deployment/terraform/modules`), con el fin de crear los recursos necesarios en AWS para desplegar la aplicación de forma segura, escalable y altamente disponible (multi-AZ).
+
+A continuación se describen los recursos aprovisionados, agrupados por dominio:
+
+### 🌐 Networking (módulo `networking`)
+- **VPC default** de la cuenta `437952802980` en la región `us-east-1`.
+- **Subnets públicas** distribuidas en 2 Availability Zones (`us-east-1a` y `us-east-1b`) para alta disponibilidad.
+- **Security Group del ALB**: permite ingreso desde `0.0.0.0/0` por TCP `:80`.
+- **Security Group de las tasks**: permite ingreso únicamente desde el SG del ALB hacia el puerto del contenedor `:8080` (acceso menos privilegiado).
+
+### ⚖️ Application Load Balancer (módulo `alb`)
+- **ALB internet-facing** `wallet-pragma-dev-alb` con listener HTTP en el puerto `:80`.
+- **Target Group** `wallet-pragma-dev-tg` con target type `ip` (necesario para Fargate con `awsvpc`), protocolo HTTP en puerto `:8080`.
+- **Health Check** apuntando a `GET /actuator/health` para detectar tasks no saludables y reemplazarlas.
+
+### 🚀 Compute — ECS Fargate (módulo `ecs`)
+- **ECS Cluster**: `wallet-pragma-dev-cluster`.
+- **Task Definition** con launch type **Fargate** (`awsvpc`), `512` CPU units y `1024 MB` de memoria.
+- **ECS Service** `wallet-pragma-dev-service` con `desired_count = 2`, distribuyendo una task por AZ.
+- **CloudWatch Log Group** `/ecs/wallet-pragma-dev-api` con retención de 7 días para los logs del contenedor (driver `awslogs`).
+
+### 🐳 Container Registry
+- **Amazon ECR**: repositorio `437952802980.dkr.ecr.us-east-1.amazonaws.com/wallet-pragma-api` desde el que las tasks hacen *pull* de la imagen `:latest` al iniciar.
+
+### 🔐 IAM (módulo `iam`)
+- **Execution Role** (`ecs-execution-role`) con la política administrada `AmazonECSTaskExecutionRolePolicy` (permite a ECS hacer pull desde ECR y escribir logs en CloudWatch).
+- **Task Role** (`ecs-task-role`) usado por la aplicación en runtime para invocar APIs de AWS si fuera necesario.
+
+### 🍃 Persistencia (servicio externo)
+- **MongoDB Atlas** — `wallet-db.fx23h97.mongodb.net`. La URI se inyecta a la task como variable de entorno `SPRING_DATA_MONGODB_URI`. La conexión se realiza vía TLS desde las tasks hacia Atlas a través de Internet (no usa VPC peering en este entorno).
+
+### 🗺️ Diagrama de infraestructura
+
+El siguiente diagrama detalla cada componente de AWS, sus relaciones y el flujo de tráfico. Está en formato SVG (vectorial) — haz clic para verlo a tamaño completo y poder hacer zoom sin perder nitidez:
+
+![Diagrama de Infraestructura](Infrastructure.svg)
+
+> 💡 También puedes consultar el diagrama interactivo en Mermaid en [`deployment/terraform/ARCHITECTURE_DIAGRAM.md`](deployment/terraform/ARCHITECTURE_DIAGRAM.md), listo para abrir en draw.io.
+
+Autor: [@juanacosta-pragma](https://github.com/juanacosta-pragma)
+   

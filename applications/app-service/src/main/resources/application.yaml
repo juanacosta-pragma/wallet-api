@@ -2,7 +2,7 @@ server:
   port: 8080
 spring:
   application:
-    name: "WalletApi"
+    name: "WalletPragmaApi"
   devtools:
     add-properties: false
   h2:
@@ -11,6 +11,12 @@ spring:
       path: "/h2"
   profiles:
     include: null
+  data:
+    mongodb:
+      uri: ${SPRING_DATA_MONGODB_URI:mongodb://root:root@localhost:27017/wallet-db?authSource=admin}
+      database: ${SPRING_DATA_MONGODB_DATABASE:wallet-db}
+      enabled: true
+
 management:
   endpoints:
     web:
@@ -20,5 +26,43 @@ management:
     health:
       probes:
         enabled: true
+      group:
+        liveness:
+          include: "livenessState"
+        readiness:
+          include: "readinessState"
+  health:
+    # Health check de Mongo deshabilitado: el ALB usa /actuator/health/liveness
+    # para no derribar tasks por fallos transitorios de la BD externa.
+    # La salud real de Mongo se monitorea vía Prometheus / CloudWatch logs.
+    mongo:
+      enabled: false
+    mongodb:
+      enabled: false
+    defaults:
+      enabled: true
 cors:
   allowed-origins: "http://localhost:4200,http://localhost:8080"
+springdoc:
+  swagger-ui:
+    path: "/swagger-ui.html"
+    operationsSorter: "method"
+    tagsSorter: "alpha"
+    display-request-duration: true
+    filter: true
+  api-docs:
+    path: "/v3/api-docs"
+resilience4j:
+  circuitbreaker:
+    instances:
+      mongoCircuitBreaker:
+        registerHealthIndicator: true
+        slidingWindowSize: 2
+        permittedNumberOfCallsInHalfOpenState: 2
+        slidingWindowType: COUNT_BASED
+        minimumNumberOfCalls: 1
+        waitDurationInOpenState: 3s
+        failureRateThreshold: 50
+        recordExceptions:
+          - java.lang.Exception
+          - com.mongodb.MongoException

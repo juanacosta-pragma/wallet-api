@@ -1,0 +1,93 @@
+# =============================================================================
+# Docker Compose — Form Local
+#
+# Services:
+#   - mongo:          MongoDB 7 (fuente de la verdad)
+#   - localstack:     Simula AWS (Secrets Manager, ECS, ECR, etc.)
+#   - mongo-express:  UI web para Mongo (http://localhost:8082)
+#   - app:            La API Spring Boot (http://localhost:8080)
+#
+# Up All :                podman compose up -d
+# Up just infra:          podman compose up -d mongo localstack adminer mongo-express
+# View logs:              podman compose logs -f app
+# Sutdown:                podman compose down
+# Total Reset (data):     podman compose down -v
+# =============================================================================
+
+services:
+  # ─── MongoDB ────────────────────────────────────────────────────────────────
+  mongo:
+    image: mongo:7
+    container_name: wallet-mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: root
+      MONGO_INITDB_DATABASE: wallet-db
+    ports:
+      - "27017:27017"
+    volumes:
+      - wallet_mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ─── LocalStack (simula AWS) ────────────────────────────────────────────────
+  localstack:
+    image: localstack/localstack:3
+    container_name: wallet-localstack
+    restart: unless-stopped
+    environment:
+      SERVICES: secretsmanager,ecs,ecr,iam,logs,sts
+      DEFAULT_REGION: us-east-1
+    ports:
+      - "4566:4566"
+      - "4510-4559:4510-4559"
+    volumes:
+      - wallet_localstack_data:/var/lib/localstack
+
+  # ─── Mongo Express (UI MongoDB) ────────────────────────────────────────────
+  mongo-express:
+    image: mongo-express:1
+    container_name: wallet-mongo-express
+    restart: unless-stopped
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: root
+      ME_CONFIG_MONGODB_ADMINPASSWORD: root
+      ME_CONFIG_MONGODB_URL: mongodb://root:root@mongo:27017/wallet-db?authSource=admin
+      ME_CONFIG_BASICAUTH: "false"
+    ports:
+      - "8082:8081"
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  # ─── Spring Boot App ───────────────────────────────────────────────────────
+  app:
+    image: wallet-pragma-api:local
+    # build:
+    #   context: .
+    #   dockerfile: ./deployment/Dockerfile
+    container_name: wallet-app
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      # --- MongoDB ---
+      SPRING_DATA_MONGODB_URI: "mongodb://root:root@mongo:27017/wallet-db?authSource=admin"
+      SPRING_DATA_MONGODB_DATABASE: "wallet-db"      #
+      # --- LocalStack (Secrets Manager) ---
+      AWS_ENDPOINT: "http://localstack:4566"
+      AWS_ACCESS_KEY_ID: "test"
+      AWS_SECRET_ACCESS_KEY: "test"
+      AWS_REGION: "us-east-1"
+    depends_on:
+      mongo:
+        condition: service_healthy
+      
+volumes:
+  wallet_mongo_data:
+  wallet_pg_data:
+  wallet_localstack_data:

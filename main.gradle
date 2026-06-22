@@ -27,6 +27,12 @@ subprojects {
         useJUnitPlatform()
     }
 
+    dependencyManagement {
+        imports {
+            mavenBom "org.springframework.boot:spring-boot-dependencies:${springBootVersion}"
+        }
+    }
+
     dependencies {
         implementation 'io.projectreactor:reactor-core'
         implementation 'io.projectreactor.addons:reactor-extra'
@@ -40,8 +46,8 @@ subprojects {
         annotationProcessor "org.projectlombok:lombok:${lombokVersion}"
         testCompileOnly "org.projectlombok:lombok:${lombokVersion}"
         testAnnotationProcessor "org.projectlombok:lombok:${lombokVersion}"
-        implementation platform("org.springframework.boot:spring-boot-dependencies:${springBootVersion}")
         pitest "org.pitest:pitest-history-plugin:${pitestHistoryVersion}"
+
     }
 
     tasks.withType(Test).configureEach {
@@ -80,6 +86,33 @@ subprojects {
             xml.setOutputLocation layout.buildDirectory.file("reports/jacoco.xml")
             csv.setRequired false
             html.setOutputLocation layout.buildDirectory.dir("reports/jacocoHtml")
+        }
+    }
+
+    // Enforce a minimum line coverage per subproject. Ajusta el mínimo si es necesario.
+    if (tasks.findByName('jacocoTestCoverageVerification') == null) {
+        tasks.register('jacocoTestCoverageVerification', JacocoCoverageVerification) {
+            dependsOn test
+            executionData.setFrom fileTree(dir: buildDir, include: 'jacoco/*.exec')
+            classDirectories.setFrom files(sourceSets.main.output)
+            sourceDirectories.setFrom files(sourceSets.main.allSource.srcDirs)
+
+            violationRules {
+                rule {
+                    enabled = true
+                    element = 'CLASS'
+                    limit {
+                        counter = 'LINE'
+                        value = 'COVERED_RATIO'
+                        minimum = 0.90
+                    }
+                }
+            }
+        }
+
+        // Asegura que 'check' falle si la cobertura es inferior al mínimo
+        tasks.named('check') {
+            dependsOn tasks.named('jacocoTestCoverageVerification')
         }
     }
 

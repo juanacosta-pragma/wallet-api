@@ -1,21 +1,18 @@
 package co.com.bancolombia.model.transaction;
-import lombok.Builder;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 
 import java.math.BigDecimal;
-import java.sql.Timestamp;
+import java.time.LocalDateTime;
 
 @Getter
 @Setter
+@With
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder(toBuilder = true)
 public class Transaction {
     private String id;
-    private String pocketId;
+    private String description;
     private BigDecimal amount;
-    private Timestamp localDateTime;
+    private LocalDateTime createdAt;
 }
